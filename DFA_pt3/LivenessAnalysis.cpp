@@ -2,6 +2,7 @@
 namespace llvm {
 
 class LivenessInfo : public Info {
+public:
 	LivenessInfo() = default;
 	LivenessInfo(const LivenessInfo& other) :
 		Info(other),
