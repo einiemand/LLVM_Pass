@@ -45,7 +45,7 @@ private:
 class LivenessAnalysis : DataFlowAnalysis<LivenessInfo, false> {
 public:
 	LivenessAnalysis(LivenessInfo& bottom, LivenessInfo& initialState) :
-		DataFlowAnalysis<LivenessInfo, true>(bottom, initialState)
+		DataFlowAnalysis<LivenessInfo, false>(bottom, initialState)
 	{
 	}
 
@@ -65,7 +65,7 @@ private:
 		LivenessInfo outInfo;
 		for (unsigned preIndex : IncomingEdges) {
 			Edge incomingEdge = std::make_pair(preIndex, curIndex);
-			join(EdgeToInfo[incomingEdge], &outInfo, &outInfo);
+			LivenessInfo::join(EdgeToInfo[incomingEdge], &outInfo, &outInfo);
 		}
 
 		if (!isa<PHINode>(I)) {
