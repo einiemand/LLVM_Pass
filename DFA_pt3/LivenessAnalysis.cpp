@@ -71,13 +71,29 @@ private:
 		}
 
 		if (!isa<PHINode>(I)) {
+			for (auto opIter = I->op_begin(); opIter != I->op_end(); ++opIter) {
+				Value* val = opIter->get();
+				if (isa<Intruction>(val)) {
+					Intruction* pInstr = cast<Intruction>(val);
+					if (InstrToIndex.count(pInstr)) {
+						outInfo.getEdgeInfo().insert(InstrToIndex[pInstr]);
+					}
+				}
+			}
 			if (I->isBinaryOp() ||
 				I->isShift() ||
 				I->isBitwiseLogicOp() ||
 				opCodes.count(I->getOpcode()))
 			{
-
+				outInfo.getEdgeInfo().erase(I);
 			}
+		}
+
+		Infos.clear();
+		for (unsigned nexIndex : OutgoingEdges) {
+			Infos.push_back(new LivenessInfo);
+			Edge outgoingEdge = std::make_pair(curIndex, nexIndex);
+			LivenessInfo::join(&outInfo, EdgeToInfo[outgoingEdge], Infos.back());
 		}
 	}
 
