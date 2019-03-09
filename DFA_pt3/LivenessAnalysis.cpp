@@ -60,7 +60,7 @@ private:
 							  std::vector<unsigned>& OutgoingEdges,
 							  std::vector<LivenessInfo*>& Infos) override
 	{
-		/*if (!I) {
+		if (!I) {
 			return;
 		}
 		unsigned curIndex = InstrToIndex[I];
@@ -74,11 +74,11 @@ private:
 			if (I->isBinaryOp() ||
 				I->isShift() ||
 				I->isBitwiseLogicOp() ||
-				opCodes.count(I->getOpcode())) 
+				opCodes.count(I->getOpcode()))
 			{
-					
+
 			}
-		}*/
+		}
 	}
 
 };
@@ -92,5 +92,27 @@ const std::unordered_set<unsigned> LivenessAnalysis::opCodes{
 	Instruction::PHI,
 	Instruction::Select
 };
+
+namespace {
+
+struct LivenessAnalysisPass : public FunctionPass {
+	static char ID;
+	LivenessAnalysisPass() : FunctionPass(ID) {}
+
+	virtual bool runOnFunction(Function& func) override {
+		LivenessInfo bottom;
+		LivenessAnalysis(bottom, bottom).runWorklistAlgorithm(&func);
+
+		return false;
+	}
+};
+}
+
+char LivenessAnalysisPass::ID = 0;
+static RegisterPass<LivenessAnalysisPass> cse231_liveness(
+	"cse231-liveness",
+	"cse231-liveness",
+	false,
+	false);
 
 }
