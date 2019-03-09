@@ -87,7 +87,7 @@ private:
 		for (unsigned nexIndex : OutgoingEdges) {
 			Infos.push_back(new ReachingInfo);
 			Edge outgoingEdge = std::make_pair(curIndex, nexIndex);
-			join(&outInfo, EdgeToInfo[outgoingEdge], Infos.back());
+			ReachingInfo::join(&outInfo, EdgeToInfo[outgoingEdge], Infos.back());
 		}
 	}
 };
