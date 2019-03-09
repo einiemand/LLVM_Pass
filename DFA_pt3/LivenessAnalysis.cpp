@@ -85,7 +85,7 @@ private:
 				I->isBitwiseLogicOp() ||
 				opCodes.count(I->getOpcode()))
 			{
-				outInfo.getEdgeInfo().erase(I);
+				outInfo.getEdgeInfo().erase(InstrToIndex[I]);
 			}
 		}
 
