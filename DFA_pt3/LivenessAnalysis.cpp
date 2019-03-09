@@ -42,7 +42,7 @@ private:
 	std::unordered_set<unsigned> insts;
 };
 
-class LivenessAnalysis : DataFlowAnalysis<LivenessInfo, false> {
+class LivenessAnalysis : public DataFlowAnalysis<LivenessInfo, false> {
 public:
 	LivenessAnalysis(LivenessInfo& bottom, LivenessInfo& initialState) :
 		DataFlowAnalysis<LivenessInfo, false>(bottom, initialState)
