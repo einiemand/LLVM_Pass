@@ -73,8 +73,8 @@ private:
 		if (!isa<PHINode>(I)) {
 			for (auto opIter = I->op_begin(); opIter != I->op_end(); ++opIter) {
 				Value* val = opIter->get();
-				if (isa<Intruction>(val)) {
-					Intruction* pInstr = cast<Intruction>(val);
+				if (isa<Instruction>(val)) {
+					Instruction* pInstr = cast<Instruction>(val);
 					if (InstrToIndex.count(pInstr)) {
 						outInfo.getEdgeInfo().insert(InstrToIndex[pInstr]);
 					}
