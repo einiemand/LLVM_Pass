@@ -56,7 +56,7 @@ private:
 	virtual void flowfunction(Instruction* I,
 							  std::vector<unsigned>& IncomingEdges,
 							  std::vector<unsigned>& OutgoingEdges,
-							  std::vector<ReachingInfo*>& Infos) override
+							  std::vector<LivenessInfo*>& Infos) override
 	{
 		if (!I) {
 			return;
