@@ -9,15 +9,38 @@ public:
 		insts(other.insts)
 	{
 	}
-	explicit LivenessInfo(const std::unordered_set<unsigned>& instrSet) :
-		insts(instrSet)
-	{
-	}
-	LivenessInfo& operator=(const LivenessInfo& other) {
-		insts = other.insts;
-		return *this;
-	}
 	virtual ~LivenessInfo() override = default;
+
+	/*
+	 * Compare two pieces of information
+	 *
+	 * Direction:
+	 *   In your subclass you need to implement this function.
+	 */
+	static bool equals(LivenessInfo* info1, LivenessInfo* info2) {
+		return info1->insts == info2->insts;
+	}
+	/*
+	 * Join two pieces of information.
+	 * The third parameter points to the result.
+	 *
+	 * Direction:
+	 *   In your subclass you need to implement this function.
+	 */
+	static void join(LivenessInfo* info1, LivenessInfo* info2, LivenessInfo* result) {
+		if (!result) {
+			return;
+		}
+		std::unordered_set<unsigned> temp;
+		if (info1) {
+			temp.insert(info1->insts.cbegin(), info1->insts.cend());
+		}
+		if (info2) {
+			temp.insert(info2->insts.cbegin(), info2->insts.cend());
+		}
+		result->insts = std::move(temp);
+	}
+
 	/*
 	* Print out the information
 	*
@@ -31,15 +54,6 @@ public:
 		errs() << '\n';
 	}
 
-	virtual const std::unordered_set<unsigned>& getEdgeInfo() const override {
-		return insts;
-	}
-
-	virtual std::unordered_set<unsigned>& getEdgeInfo() override {
-		return insts;
-	}
-
-private:
 	std::unordered_set<unsigned> insts;
 };
 
@@ -76,7 +90,7 @@ private:
 				if (isa<Instruction>(val)) {
 					Instruction* pInstr = cast<Instruction>(val);
 					if (InstrToIndex.count(pInstr)) {
-						outInfo.getEdgeInfo().insert(InstrToIndex[pInstr]);
+						outInfo.insts.insert(InstrToIndex[pInstr]);
 					}
 				}
 			}
@@ -85,16 +99,43 @@ private:
 				I->isBitwiseLogicOp() ||
 				opCodes.count(I->getOpcode()))
 			{
-				outInfo.getEdgeInfo().erase(InstrToIndex[I]);
+				outInfo.insts.erase(InstrToIndex[I]);
+			}
+			for (unsigned nexIndex : OutgoingEdges) {
+				Infos.push_back(new LivenessInfo);
+				Edge outgoingEdge = std::make_pair(curIndex, nexIndex);
+				LivenessInfo::join(&outInfo, EdgeToInfo[outgoingEdge], Infos.back());
+			}
+		}
+		else {
+			for (auto pInstr = I; isa<PHINode>(pInstr); pInstr = pInstr->getNextNode()) {
+				outInfo.insts.erase(InstrToIndex[pInstr]);
+				if (pInstr->isTerminator()) {
+					break;
+				}
+			}
+			for (unsigned nexIndex : OutgoingEdges) {
+				Instruction* nexInstr = IndexToInstr[nexIndex];
+				Infos.push_back(new LivenessInfo);
+				Edge outgoingEdge{ curIndex,nexIndex };
+				LivenessInfo::join(&outInfo, EdgeToInfo[outgoingEdge], Infos.back());
+
+				for (auto pInstr = I; isa<PHINode>(pInstr); pInstr = pInstr->getNextNode()) {
+					PHINode* phi = cast<PHINode>(pInstr);
+					for (unsigned k = 0; k < phi->getNumIncomingValues(); ++k) {
+						if (phi->getIncomingBlock(k) == nexInstr->getParent() && isa<Instruction>(phi->getIncomingValue(k))) {
+							Instruction* val = cast<Instruction>(phi->getIncomingValue(k));
+							Infos.back()->insts.insert(InstrToIndex[val]);
+						}
+					}
+					if (pInstr->isTerminator()) {
+						break;
+					}
+				}
+				
 			}
 		}
 
-		Infos.clear();
-		for (unsigned nexIndex : OutgoingEdges) {
-			Infos.push_back(new LivenessInfo);
-			Edge outgoingEdge = std::make_pair(curIndex, nexIndex);
-			LivenessInfo::join(&outInfo, EdgeToInfo[outgoingEdge], Infos.back());
-		}
 	}
 
 };

@@ -26,6 +26,7 @@
 #include <utility>
 #include <vector>
 #include <unordered_set>
+#include <unordered_map>
 
 namespace llvm {
 
@@ -38,6 +39,7 @@ class Info {
 public:
 	Info() {}
 	Info(const Info& other) {}
+	Info& operator=(const Info&) = delete;
 	virtual ~Info() {};
 
 	/*
@@ -48,18 +50,13 @@ public:
 	 */
 	virtual void print() = 0;
 
-	virtual const std::unordered_set<unsigned>& getEdgeInfo() const = 0;
-	virtual std::unordered_set<unsigned>& getEdgeInfo() = 0;
-
 	/*
 	 * Compare two pieces of information
 	 *
 	 * Direction:
 	 *   In your subclass you need to implement this function.
 	 */
-	static bool equals(Info* info1, Info* info2) {
-		return info1->getEdgeInfo() == info2->getEdgeInfo();
-	}
+	static bool equals(Info* info1, Info* info2);
 	/*
 	 * Join two pieces of information.
 	 * The third parameter points to the result.
@@ -67,19 +64,7 @@ public:
 	 * Direction:
 	 *   In your subclass you need to implement this function.
 	 */
-	static void join(Info* info1, Info* info2, Info* result) {
-		if (!result) {
-			return;
-		}
-		std::unordered_set<unsigned> temp;
-		if (info1) {
-			temp.insert(info1->getEdgeInfo().cbegin(), info1->getEdgeInfo().cend());
-		}
-		if (info2) {
-			temp.insert(info2->getEdgeInfo().cbegin(), info2->getEdgeInfo().cend());
-		}
-		result->getEdgeInfo() = std::move(temp);
-	}
+	static void join(Info* info1, Info* info2, Info* result);
 
 };
 
