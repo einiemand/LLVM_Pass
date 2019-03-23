@@ -20,8 +20,7 @@ public:
 	virtual void print() override {
 		for (const auto& item : pointTo) {
 			if (!item.second.empty()) {
-				unsigned ptr = item.first;
-				errs() << 'R' << ptr << "->(";
+				errs() << item.first.first << item.first.second << "->(";
 				for (unsigned pte : item.second) {
 					errs() << 'M' << pte << '/';
 				}
@@ -38,7 +37,8 @@ public:
 	 *   In your subclass you need to implement this function.
 	 */
 	static bool equals(MayPointToInfo* info1, MayPointToInfo* info2) {
-		return info1->pointTo == info2->pointTo;
+		return (!info1 && !info2) ||
+		       (info1 && info2 && info1->pointTo == info2->pointTo);
 	}
 	/*
 	 * Join two pieces of information.
@@ -51,17 +51,17 @@ public:
 		if (!result) {
 			return;
 		}
-		std::unordered_map<unsigned, std::unordered_set<unsigned>> temp;
+		std::map<std::pair<char, unsigned>, std::unordered_set<unsigned>> temp_pointTo;
 		if (info1) {
-			temp.insert(info1->pointTo.cbegin(), info1->pointTo.cend());
+			temp_pointTo.insert(info1->pointTo.cbegin(), info1->pointTo.cend());
 		}
 		if (info2) {
-			temp.insert(info2->pointTo.cbegin(), info2->pointTo.cend());
+			temp_pointTo.insert(info2->pointTo.cbegin(), info2->pointTo.cend());
 		}
-		result->pointTo = std::move(temp);
+		result->pointTo = std::move(temp_pointTo);
 	}
 
-	std::unordered_map<unsigned, std::unordered_set<unsigned>> pointTo;
+	std::map<std::pair<char, unsigned>, std::unordered_set<unsigned>> pointTo;
 };
 
 class MayPointToAnalysis : public DataFlowAnalysis<MayPointToInfo, true> {
@@ -73,8 +73,6 @@ public:
 
 	virtual ~MayPointToAnalysis() override = default;
 private:
-	static const std::unordered_set<unsigned> opCodes;
-
 	virtual void flowfunction(Instruction* I,
 							  std::vector<unsigned>& IncomingEdges,
 							  std::vector<unsigned>& OutgoingEdges,
@@ -83,68 +81,71 @@ private:
 		if (!I) {
 			return;
 		}
+
 		unsigned curIndex = InstrToIndex[I];
 		MayPointToInfo outInfo;
-		auto& curInfo = outInfo.pointTo;
+		auto& pointTo_info = outInfo.pointTo;
+
 		for (unsigned preIndex : IncomingEdges) {
 			Edge incomingEdge = std::make_pair(preIndex, curIndex);
 			MayPointToInfo::join(EdgeToInfo[incomingEdge], &outInfo, &outInfo);
 		}
+
 		unsigned opcode = I->getOpcode();
 
 		if (opcode == Instruction::Alloca) {
-			curInfo[curIndex].insert(curIndex);
+			pointTo_info[{ 'R',curIndex }].insert(curIndex);
 		}
 		else if (opcode == Instruction::BitCast || opcode == Instruction::GetElementPtr) {
-			Instruction* operand = cast<Instruction>(I->getOperand(0));
-			unsigned idx = InstrToIndex[operand];
-			for (unsigned pte : curInfo[idx]) {
-				curInfo[curIndex].insert(pte);
+			Instruction* RvInstr = cast<Instruction>(I->getOperand(0));
+			unsigned Rv = InstrToIndex[RvInstr];
+			const auto& pointees = pointTo_info[{ 'R',Rv }];
+			pointTo_info[{ 'R',curIndex }].insert(pointees.cbegin(), pointees.cend());
+		}
+		else if (opcode == Instruction::Load) {
+			LoadInst* loadInstr = cast<LoadInst>(I);
+			Instruction* RpInstr = cast<Instruction>(loadInstr->getPointerOperand());
+			unsigned Rp = InstrToIndex[RpInstr];
+
+			for (unsigned X : pointTo_info[{ 'R',Rp }]) {
+				const auto& Ys = pointTo_info[{ 'M',X }];
+				pointTo_info[{ 'R',curIndex }].insert(Ys.cbegin(), Ys.cend());
 			}
 		}
-		// else if (opcode == Instruction::Load) {
-		// 	if (isa<Instruction>(I->getOperand(0))) {
-		// 		Instruction* operand = cast<Instruction>(I->getOperand(0));
-		// 		unsigned ptr = InstrToIndex[operand];
-		// 		for (unsigned pte1 : curInfo[ptr]) {
-		// 			for (unsigned pte2 : curInfo[pte1]) {
-		// 				curInfo[curIndex].insert(pte2);
-		// 			}
-		// 		}
-		// 	}
-		// }
 		else if (opcode == Instruction::Store) {
-			Instruction* val = cast<Instruction>(I->getOperand(0));
-			Instruction* ptr = cast<Instruction>(I->getOperand(1));
-			unsigned idx1 = InstrToIndex[val], idx2 = InstrToIndex[ptr];
-			for (unsigned y : curInfo[idx2]) {
-				for (unsigned x : curInfo[idx1]) {
-					curInfo[y].insert(x);
-				}
+			StoreInst* storeInstr = cast<StoreInst>(I);
+			Instruction* RvInstr = cast<Instruction>(storeInstr->getValueOperand());
+			Instruction* RpInstr = cast<Instruction>(storeInstr->getPointerOperand());
+
+			unsigned Rv = InstrToIndex[RvInstr], Rp = InstrToIndex[RpInstr];
+			const auto& Xs = pointTo_info[{ 'R',Rv }];
+
+			for (unsigned Y : pointTo_info[{ 'R',Rp }]) {
+				pointTo_info[{ 'M',Y }].insert(Xs.cbegin(), Xs.cend());
 			}
 		}
 		else if (opcode == Instruction::Select) {
-			Instruction* val1 = cast<Instruction>(I->getOperand(1));
-			Instruction* val2 = cast<Instruction>(I->getOperand(2));
-			unsigned idx1 = InstrToIndex[val1], idx2 = InstrToIndex[val2];
-			for (unsigned pte : curInfo[idx1]) {
-				curInfo[curIndex].insert(pte);
-			}
-			for (unsigned pte : curInfo[idx2]) {
-				curInfo[curIndex].insert(pte);
-			}
+			SelectInst* selectInstr = cast<SelectInst>(I);
+			Instruction* R1Instr = cast<Instruction>(selectInstr->getTrueValue());
+			Instruction* R2Instr = cast<Instruction>(selectInstr->getFalseValue());
+
+			unsigned R1 = InstrToIndex[R1Instr];
+			const auto& Xs1 = pointTo_info[{ 'R',R1 }];
+			pointTo_info[{ 'R',curIndex }].insert(Xs1.cbegin(), Xs1.cend());
+
+			unsigned R2 = InstrToIndex[R2Instr];
+			const auto& Xs2 = pointTo_info[{ 'R',R2 }];
+			pointTo_info[{ 'R',curIndex }].insert(Xs2.cbegin(), Xs2.cend());
 		}
 		else if (opcode == Instruction::PHI) {
 			for (auto pInstr = I; isa<PHINode>(pInstr); pInstr = pInstr->getNextNode()) {
 				PHINode* phi = cast<PHINode>(pInstr);
 				for (unsigned k = 0; k < phi->getNumIncomingValues(); ++k) {
-					if (isa<Instruction>(phi->getIncomingValue(k))) {
-						Instruction* val = cast<Instruction>(phi->getIncomingValue(k));
-						unsigned idx = InstrToIndex[val];
-						for (unsigned pte : curInfo[idx]) {
-							curInfo[curIndex].insert(pte);
-						}
-					}
+					Instruction* RkInstr = cast<Instruction>(phi->getIncomingValue(k));
+					unsigned Rk = InstrToIndex[RkInstr];
+					
+					const auto& Xs = pointTo_info[{ 'R',Rk }];
+					pointTo_info[{ 'R',curIndex }].insert(Xs.cbegin(), Xs.cend());
 				}
 				if (pInstr->isTerminator()) {
 					break;
